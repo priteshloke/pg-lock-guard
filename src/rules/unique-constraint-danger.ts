@@ -16,6 +16,7 @@ export const uniqueConstraintDangerRule: LockRule = {
         severity: 'CRITICAL',
         acquiredLock: 'AccessExclusiveLock',
         lineNumber: stmt.lineNumber,
+        endLineNumber: stmt.endLineNumber,
         tableName: table,
         offendingSql: stmt.rawSql,
         explanation: `Adding a ${isPk ? 'PRIMARY KEY' : 'UNIQUE'} constraint directly acquires an AccessExclusiveLock and performs an unindexed full table verification scan, blocking all reads and writes.`,

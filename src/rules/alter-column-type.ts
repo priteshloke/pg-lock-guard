@@ -16,6 +16,7 @@ export const alterColumnTypeRule: LockRule = {
         severity: 'HIGH',
         acquiredLock: 'AccessExclusiveLock',
         lineNumber: stmt.lineNumber,
+        endLineNumber: stmt.endLineNumber,
         tableName: table,
         offendingSql: stmt.rawSql,
         explanation: `Changing column "${col}" data type acquires an AccessExclusiveLock and forces a full physical table rewrite on "${table}", blocking all read and write queries.`,

@@ -13,6 +13,7 @@ export const concurrentIndexInTransactionRule: LockRule = {
         severity: 'CRITICAL',
         acquiredLock: 'AccessExclusiveLock',
         lineNumber: stmt.lineNumber,
+        endLineNumber: stmt.endLineNumber,
         tableName: table,
         offendingSql: stmt.rawSql,
         explanation: 'PostgreSQL strictly prohibits running "CREATE INDEX CONCURRENTLY" or "VACUUM" inside a transaction block (BEGIN ... COMMIT). Execution will immediately throw a fatal error.',

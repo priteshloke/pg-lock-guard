@@ -17,7 +17,8 @@ const VOLATILE_FUNCTIONS = [
 
 interface RawSegment {
   sql: string;
-  lineNumber: number;
+  startLine: number;
+  endLine: number;
 }
 
 /**
@@ -130,7 +131,8 @@ export function splitSqlStatements(sqlContent: string): RawSegment[] {
       if (trimmed) {
         segments.push({
           sql: trimmed + ';',
-          lineNumber: statementStartLine,
+          startLine: statementStartLine,
+          endLine: currentLine,
         });
       }
       currentBuffer = '';
@@ -147,7 +149,8 @@ export function splitSqlStatements(sqlContent: string): RawSegment[] {
   if (finalTrimmed) {
     segments.push({
       sql: finalTrimmed,
-      lineNumber: statementStartLine,
+      startLine: statementStartLine,
+      endLine: currentLine,
     });
   }
 
@@ -160,7 +163,7 @@ export function parseSqlMigration(sqlContent: string): SqlStatementAst[] {
   let inTransaction = false;
 
   for (const seg of rawSegments) {
-    const parsed = analyzeStatement(seg.sql, seg.lineNumber, inTransaction);
+    const parsed = analyzeStatement(seg.sql, seg.startLine, seg.endLine, inTransaction);
     if (parsed.type === 'BEGIN_TRANSACTION') {
       inTransaction = true;
     } else if (parsed.type === 'COMMIT_TRANSACTION') {
@@ -172,16 +175,16 @@ export function parseSqlMigration(sqlContent: string): SqlStatementAst[] {
   return statements;
 }
 
-function analyzeStatement(sql: string, lineNumber: number, inTransaction: boolean): SqlStatementAst {
+function analyzeStatement(sql: string, startLine: number, endLine: number, inTransaction: boolean): SqlStatementAst {
   const cleanSql = sql.replace(/\s+/g, ' ').trim();
   const upper = cleanSql.toUpperCase();
 
   // 1. Transaction markers
   if (upper === 'BEGIN' || upper === 'BEGIN;' || upper.startsWith('BEGIN TRANSACTION') || upper.startsWith('START TRANSACTION')) {
-    return { rawSql: sql, lineNumber, type: 'BEGIN_TRANSACTION', inTransaction: true };
+    return { rawSql: sql, lineNumber: startLine, endLineNumber: endLine, type: 'BEGIN_TRANSACTION', inTransaction: true };
   }
   if (upper === 'COMMIT' || upper === 'COMMIT;' || upper === 'END' || upper === 'END;' || upper.startsWith('COMMIT TRANSACTION')) {
-    return { rawSql: sql, lineNumber, type: 'COMMIT_TRANSACTION', inTransaction: false };
+    return { rawSql: sql, lineNumber: startLine, endLineNumber: endLine, type: 'COMMIT_TRANSACTION', inTransaction: false };
   }
 
   // 2. SET lock_timeout
@@ -197,7 +200,8 @@ function analyzeStatement(sql: string, lineNumber: number, inTransaction: boolea
     }
     return {
       rawSql: sql,
-      lineNumber,
+      lineNumber: startLine,
+      endLineNumber: endLine,
       type: 'SET_LOCK_TIMEOUT',
       lockTimeoutMs: ms,
       inTransaction,
@@ -211,7 +215,8 @@ function analyzeStatement(sql: string, lineNumber: number, inTransaction: boolea
     const indexMatch = cleanSql.match(/CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z0-9_."]+)/i);
     return {
       rawSql: sql,
-      lineNumber,
+      lineNumber: startLine,
+      endLineNumber: endLine,
       type: 'CREATE_INDEX',
       tableName: tableMatch ? tableMatch[1] : undefined,
       indexName: indexMatch ? indexMatch[1] : undefined,
@@ -220,15 +225,17 @@ function analyzeStatement(sql: string, lineNumber: number, inTransaction: boolea
     };
   }
 
-  // 4. VACUUM FULL
-  if (upper.startsWith('VACUUM FULL') || upper.startsWith('VACUUM (FULL') || upper.startsWith('VACUUM')) {
+  // 4. VACUUM / VACUUM FULL
+  if (upper.startsWith('VACUUM')) {
     const isFull = upper.includes('FULL');
-    const tableMatch = cleanSql.match(/VACUUM\s+(?:FULL|\(FULL.*?\))\s+([a-zA-Z0-9_."]+)/i);
+    const tableMatch = cleanSql.match(/VACUUM\s+(?:FULL|\(FULL.*?\))\s+([a-zA-Z0-9_."]+)/i) || cleanSql.match(/VACUUM\s+(?:ANALYZE\s+)?([a-zA-Z0-9_."]+)/i);
     return {
       rawSql: sql,
-      lineNumber,
+      lineNumber: startLine,
+      endLineNumber: endLine,
       type: 'VACUUM',
       tableName: tableMatch ? tableMatch[1] : undefined,
+      isFull,
       isConcurrent: !isFull,
       inTransaction,
     };
@@ -260,7 +267,8 @@ function analyzeStatement(sql: string, lineNumber: number, inTransaction: boolea
 
       return {
         rawSql: sql,
-        lineNumber,
+        lineNumber: startLine,
+        endLineNumber: endLine,
         type: 'ALTER_TABLE_ADD_COLUMN',
         tableName,
         columnName,
@@ -277,7 +285,8 @@ function analyzeStatement(sql: string, lineNumber: number, inTransaction: boolea
       const constraintMatch = cleanSql.match(/ADD\s+CONSTRAINT\s+([a-zA-Z0-9_."]+)\s+FOREIGN\s+KEY/i);
       return {
         rawSql: sql,
-        lineNumber,
+        lineNumber: startLine,
+        endLineNumber: endLine,
         type: 'ALTER_TABLE_ADD_FOREIGN_KEY',
         tableName,
         constraintName: constraintMatch ? constraintMatch[1] : undefined,
@@ -292,7 +301,8 @@ function analyzeStatement(sql: string, lineNumber: number, inTransaction: boolea
       const constraintMatch = cleanSql.match(/ADD\s+CONSTRAINT\s+([a-zA-Z0-9_."]+)\s+(?:UNIQUE|PRIMARY\s+KEY)/i);
       return {
         rawSql: sql,
-        lineNumber,
+        lineNumber: startLine,
+        endLineNumber: endLine,
         type: isPk ? 'ALTER_TABLE_ADD_PRIMARY_KEY' : 'ALTER_TABLE_ADD_UNIQUE',
         tableName,
         constraintName: constraintMatch ? constraintMatch[1] : undefined,
@@ -306,7 +316,8 @@ function analyzeStatement(sql: string, lineNumber: number, inTransaction: boolea
       const constraintMatch = cleanSql.match(/ADD\s+CONSTRAINT\s+([a-zA-Z0-9_."]+)\s+CHECK/i);
       return {
         rawSql: sql,
-        lineNumber,
+        lineNumber: startLine,
+        endLineNumber: endLine,
         type: 'ALTER_TABLE_ADD_CHECK',
         tableName,
         constraintName: constraintMatch ? constraintMatch[1] : undefined,
@@ -320,7 +331,8 @@ function analyzeStatement(sql: string, lineNumber: number, inTransaction: boolea
       const colMatch = cleanSql.match(/ALTER\s+(?:COLUMN\s+)?([a-zA-Z0-9_."]+)\s+SET\s+NOT\s+NULL/i);
       return {
         rawSql: sql,
-        lineNumber,
+        lineNumber: startLine,
+        endLineNumber: endLine,
         type: 'ALTER_TABLE_ALTER_COLUMN_SET_NOT_NULL',
         tableName,
         columnName: colMatch ? colMatch[1] : undefined,
@@ -333,7 +345,8 @@ function analyzeStatement(sql: string, lineNumber: number, inTransaction: boolea
       const colMatch = cleanSql.match(/ALTER\s+(?:COLUMN\s+)?([a-zA-Z0-9_."]+)\s+(?:SET\s+DATA\s+)?TYPE\s+([a-zA-Z0-9_."(),\s]+?)(?:;|$)/i);
       return {
         rawSql: sql,
-        lineNumber,
+        lineNumber: startLine,
+        endLineNumber: endLine,
         type: 'ALTER_TABLE_ALTER_COLUMN_TYPE',
         tableName,
         columnName: colMatch ? colMatch[1] : undefined,
@@ -347,7 +360,8 @@ function analyzeStatement(sql: string, lineNumber: number, inTransaction: boolea
       const colMatch = cleanSql.match(/DROP\s+(?:COLUMN\s+)?([a-zA-Z0-9_."]+)/i);
       return {
         rawSql: sql,
-        lineNumber,
+        lineNumber: startLine,
+        endLineNumber: endLine,
         type: 'ALTER_TABLE_DROP_COLUMN',
         tableName,
         columnName: colMatch ? colMatch[1] : undefined,
@@ -361,7 +375,8 @@ function analyzeStatement(sql: string, lineNumber: number, inTransaction: boolea
     const tableMatch = cleanSql.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z0-9_."]+)/i);
     return {
       rawSql: sql,
-      lineNumber,
+      lineNumber: startLine,
+      endLineNumber: endLine,
       type: 'CREATE_TABLE',
       tableName: tableMatch ? tableMatch[1] : undefined,
       inTransaction,
@@ -370,7 +385,8 @@ function analyzeStatement(sql: string, lineNumber: number, inTransaction: boolea
 
   return {
     rawSql: sql,
-    lineNumber,
+    lineNumber: startLine,
+    endLineNumber: endLine,
     type: 'OTHER',
     inTransaction,
   };

@@ -17,6 +17,7 @@ export const addColumnVolatileDefaultRule: LockRule = {
         severity: 'CRITICAL',
         acquiredLock: 'AccessExclusiveLock',
         lineNumber: stmt.lineNumber,
+        endLineNumber: stmt.endLineNumber,
         tableName: table,
         offendingSql: stmt.rawSql,
         explanation: `Adding column "${column}" with a volatile default expression (${defaultExpr}) forces PostgreSQL to execute a full physical table rewrite while holding an AccessExclusiveLock, blocking all reads and writes.`,

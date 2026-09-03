@@ -16,6 +16,7 @@ export const createIndexConcurrentlyRule: LockRule = {
         severity: 'CRITICAL',
         acquiredLock: 'ShareLock',
         lineNumber: stmt.lineNumber,
+        endLineNumber: stmt.endLineNumber,
         tableName: table,
         offendingSql: stmt.rawSql,
         explanation: `Creating index "${index}" without CONCURRENTLY acquires a ShareLock on "${table}", blocking all concurrent INSERT, UPDATE, and DELETE operations until indexing finishes.`,

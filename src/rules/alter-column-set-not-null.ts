@@ -15,6 +15,7 @@ export const alterColumnSetNotNullRule: LockRule = {
         severity: 'HIGH',
         acquiredLock: 'AccessExclusiveLock',
         lineNumber: stmt.lineNumber,
+        endLineNumber: stmt.endLineNumber,
         tableName: table,
         offendingSql: stmt.rawSql,
         explanation: `Executing "ALTER COLUMN ${col} SET NOT NULL" scans the entire table while holding an AccessExclusiveLock to verify no NULL values exist, blocking all concurrent read and write operations.`,

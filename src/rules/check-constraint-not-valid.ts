@@ -18,6 +18,7 @@ export const checkConstraintNotValidRule: LockRule = {
         severity: 'HIGH',
         acquiredLock: 'AccessExclusiveLock',
         lineNumber: stmt.lineNumber,
+        endLineNumber: stmt.endLineNumber,
         tableName: table,
         offendingSql: stmt.rawSql,
         explanation: `Adding a CHECK constraint without NOT VALID performs a full table sequential scan while holding an AccessExclusiveLock, blocking all reads and writes on "${table}".`,

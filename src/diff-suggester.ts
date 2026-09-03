@@ -1,7 +1,8 @@
 /**
  * src/diff-suggester.ts
  *
- * Generates unified diffs and suggested safe zero-downtime SQL replacements.
+ * Generates unified diffs and suggested safe zero-downtime SQL replacements,
+ * properly handling multi-line SQL statements without dangling continuation lines.
  */
 
 import { MigrationAuditResult } from './types.js';
@@ -22,24 +23,49 @@ export function generateSuggestedDiff(result: MigrationAuditResult, originalSql:
   }
 
   const originalLines = originalSql.split('\n');
+  const totalLines = originalLines.length;
 
-  for (let i = 0; i < originalLines.length; i++) {
-    const lineNum = i + 1;
-    const lineText = originalLines[i]!;
-    const lineViolations = result.violations.filter(v => v.lineNumber === lineNum && v.ruleId !== 'PG004_MISSING_LOCK_TIMEOUT');
+  // Collect all statement-level replacements with their start and end line bounds
+  const replacements: Array<{
+    startLine: number;
+    endLine: number;
+    safeDiff: string;
+  }> = [];
 
-    if (lineViolations.length > 0 && lineViolations.some(v => v.safeDiffReplacement)) {
-      diffLines.push(`- ${lineText}`);
-      for (const v of lineViolations) {
-        if (v.safeDiffReplacement) {
-          const replacementLines = v.safeDiffReplacement.split('\n');
-          for (const r of replacementLines) {
-            diffLines.push(`+ ${r}`);
-          }
-        }
+  for (const v of result.violations) {
+    if (v.ruleId === 'PG004_MISSING_LOCK_TIMEOUT') continue;
+    if (v.safeDiffReplacement) {
+      const start = v.lineNumber;
+      const end = v.endLineNumber ?? v.lineNumber;
+      replacements.push({
+        startLine: start,
+        endLine: end,
+        safeDiff: v.safeDiffReplacement,
+      });
+    }
+  }
+
+  let i = 0;
+  while (i < totalLines) {
+    const currentLineNum = i + 1;
+    const rep = replacements.find(r => r.startLine === currentLineNum);
+
+    if (rep) {
+      const endIdx = Math.min(rep.endLine, totalLines);
+      // Emit all removed original lines spanning startLine to endLine
+      for (let k = i; k < endIdx; k++) {
+        diffLines.push(`- ${originalLines[k]}`);
       }
+      // Emit safe replacement lines
+      const repLines = rep.safeDiff.split('\n');
+      for (const r of repLines) {
+        diffLines.push(`+ ${r}`);
+      }
+      // Advance index past the entire multi-line statement
+      i = endIdx;
     } else {
-      diffLines.push(`  ${lineText}`);
+      diffLines.push(`  ${originalLines[i]}`);
+      i++;
     }
   }
 

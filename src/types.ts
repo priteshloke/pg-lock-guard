@@ -37,6 +37,7 @@ export type StatementType =
 export interface SqlStatementAst {
   rawSql: string;
   lineNumber: number;
+  endLineNumber: number;
   type: StatementType;
   tableName?: string;
   columnName?: string;
@@ -44,6 +45,7 @@ export interface SqlStatementAst {
   constraintName?: string;
   indexName?: string;
   isConcurrent?: boolean;
+  isFull?: boolean;
   hasNotValid?: boolean;
   hasVolatileDefault?: boolean;
   defaultExpression?: string;
@@ -57,6 +59,7 @@ export interface LockViolation {
   severity: Severity;
   acquiredLock: LockLevel;
   lineNumber: number;
+  endLineNumber?: number;
   tableName: string;
   offendingSql: string;
   explanation: string;

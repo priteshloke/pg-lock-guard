@@ -13,6 +13,7 @@ export const dropColumnCascadeRule: LockRule = {
         severity: 'MEDIUM',
         acquiredLock: 'AccessExclusiveLock',
         lineNumber: stmt.lineNumber,
+        endLineNumber: stmt.endLineNumber,
         tableName: table,
         offendingSql: stmt.rawSql,
         explanation: `Dropping a column acquires an AccessExclusiveLock on "${table}". If the column is used by active application queries or views, transactions will immediately fail.`,

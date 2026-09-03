@@ -18,6 +18,7 @@ export const foreignKeyNotValidRule: LockRule = {
         severity: 'CRITICAL',
         acquiredLock: 'ShareRowExclusiveLock',
         lineNumber: stmt.lineNumber,
+        endLineNumber: stmt.endLineNumber,
         tableName: table,
         offendingSql: stmt.rawSql,
         explanation: `Adding FOREIGN KEY constraint "${constraint}" without NOT VALID acquires a ShareRowExclusiveLock on "${table}" and executes an exhaustive table scan, blocking all writes.`,

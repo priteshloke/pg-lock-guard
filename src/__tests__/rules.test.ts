@@ -25,7 +25,6 @@ describe('🛡️ PG-LOCK-GUARD: PostgreSQL Migration Lock Linter & AST Rules', 
   });
 
   it('correctly parses multiple statements sharing a single line and audits both', () => {
-    // Crucial bugfix test: statements sharing a line must not be skipped
     const sql = "SET lock_timeout = '3s'; CREATE INDEX idx_a ON orders (customer_id);";
     const result = auditSqlMigration(sql);
 
@@ -66,7 +65,6 @@ describe('🛡️ PG-LOCK-GUARD: PostgreSQL Migration Lock Linter & AST Rules', 
   });
 
   it('approves safe stable defaults like DEFAULT now() or literal constants in PostgreSQL 11+', () => {
-    // STABLE function now() does NOT rewrite the table in PG 11+
     const sql = `
       SET lock_timeout = '3s';
       ALTER TABLE orders ADD COLUMN created_at timestamptz DEFAULT now();
@@ -100,6 +98,19 @@ describe('🛡️ PG-LOCK-GUARD: PostgreSQL Migration Lock Linter & AST Rules', 
 
     assert.ok(violation, 'Should flag VACUUM FULL table lock');
     assert.equal(violation.severity, 'CRITICAL');
+  });
+
+  it('approves routine VACUUM and VACUUM ANALYZE without FULL as non-blocking maintenance', () => {
+    const sql = `
+      SET lock_timeout = '3s';
+      VACUUM orders;
+      VACUUM ANALYZE users;
+    `;
+    const result = auditSqlMigration(sql);
+    const vacuumViolation = result.violations.find(v => v.ruleId === 'PG006_VACUUM_FULL_EXCLUSIVE_LOCK');
+
+    assert.equal(vacuumViolation, undefined, 'Routine VACUUM / VACUUM ANALYZE should not trigger table lockout violation');
+    assert.equal(result.summary.isSafeToDeploy, true);
   });
 
   it('detects PG008_UNIQUE_CONSTRAINT_EXCLUSIVE_LOCK on ADD CONSTRAINT UNIQUE', () => {

@@ -5,7 +5,8 @@ export const vacuumFullDangerRule: LockRule = {
   name: 'VACUUM FULL Table Lockout',
   severity: 'CRITICAL',
   check: (stmt) => {
-    if (stmt.type === 'VACUUM') {
+    // Only VACUUM FULL acquires AccessExclusiveLock. Routine VACUUM is safe.
+    if (stmt.type === 'VACUUM' && stmt.isFull) {
       const table = stmt.tableName ?? 'table';
       return {
         ruleId: 'PG006_VACUUM_FULL_EXCLUSIVE_LOCK',
@@ -13,10 +14,11 @@ export const vacuumFullDangerRule: LockRule = {
         severity: 'CRITICAL',
         acquiredLock: 'AccessExclusiveLock',
         lineNumber: stmt.lineNumber,
+        endLineNumber: stmt.endLineNumber,
         tableName: table,
         offendingSql: stmt.rawSql,
         explanation: `VACUUM FULL acquires an AccessExclusiveLock on "${table}", completely blocking all read and write queries until the entire table and all its indexes are rewritten.`,
-        remediationAdvice: 'Use standard VACUUM (which runs concurrently) or pg_repack for online table compaction with zero downtime.',
+        remediationAdvice: 'Use standard VACUUM (which runs concurrently without exclusive locks) or pg_repack for online table compaction with zero downtime.',
       };
     }
     return null;

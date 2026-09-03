@@ -13,6 +13,29 @@ describe('📝 PG-LOCK-GUARD: Safe Diff Suggester', () => {
     assert.ok(diff.includes('+ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_timestamp ON logs (timestamp);'), 'Diff should replace with CONCURRENTLY');
   });
 
+  it('correctly replaces multi-line formatted statements without dangling lines', () => {
+    const sql = [
+      "SET lock_timeout = '3s';",
+      "ALTER TABLE orders",
+      "  ADD CONSTRAINT fk_orders_customer",
+      "  FOREIGN KEY (customer_id)",
+      "  REFERENCES customers(id);",
+    ].join('\n');
+
+    const result = auditSqlMigration(sql, 'multiline.sql');
+    const diff = generateSuggestedDiff(result, sql);
+
+    // Assert all multi-line lines were removed (-)
+    assert.ok(diff.includes('- ALTER TABLE orders'), 'Should mark first line as removed');
+    assert.ok(diff.includes('-   ADD CONSTRAINT fk_orders_customer'), 'Should mark second line as removed');
+    assert.ok(diff.includes('-   FOREIGN KEY (customer_id)'), 'Should mark third line as removed');
+    assert.ok(diff.includes('-   REFERENCES customers(id);'), 'Should mark fourth line as removed');
+
+    // Assert safe replacement with NOT VALID was emitted
+    assert.ok(diff.includes('NOT VALID;'), 'Should include NOT VALID in replacement');
+    assert.ok(diff.includes('VALIDATE CONSTRAINT fk_orders_customer;'), 'Should include VALIDATE step');
+  });
+
   it('returns clean confirmation message when migration is already safe', () => {
     const sql = `
       SET lock_timeout = '3s';
