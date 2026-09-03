@@ -13,6 +13,10 @@ import { lockTimeoutPresentRule } from './rules/lock-timeout-present.js';
 import { alterColumnTypeRule } from './rules/alter-column-type.js';
 import { vacuumFullDangerRule } from './rules/vacuum-full-danger.js';
 import { dropColumnCascadeRule } from './rules/drop-column-cascade.js';
+import { uniqueConstraintDangerRule } from './rules/unique-constraint-danger.js';
+import { checkConstraintNotValidRule } from './rules/check-constraint-not-valid.js';
+import { alterColumnSetNotNullRule } from './rules/alter-column-set-not-null.js';
+import { concurrentIndexInTransactionRule } from './rules/concurrent-index-in-transaction.js';
 
 export const ALL_LOCK_RULES: LockRule[] = [
   createIndexConcurrentlyRule,
@@ -22,6 +26,10 @@ export const ALL_LOCK_RULES: LockRule[] = [
   alterColumnTypeRule,
   vacuumFullDangerRule,
   dropColumnCascadeRule,
+  uniqueConstraintDangerRule,
+  checkConstraintNotValidRule,
+  alterColumnSetNotNullRule,
+  concurrentIndexInTransactionRule,
 ];
 
 export function auditSqlMigration(sqlContent: string, filePath = 'migration.sql'): MigrationAuditResult {

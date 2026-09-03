@@ -7,6 +7,7 @@ export const createIndexConcurrentlyRule: LockRule = {
   check: (stmt) => {
     if (stmt.type === 'CREATE_INDEX' && !stmt.isConcurrent) {
       const table = stmt.tableName ?? 'table';
+      const index = stmt.indexName ?? 'idx_name';
       const safeDiff = stmt.rawSql.replace(/CREATE\s+(UNIQUE\s+)?INDEX/i, (_match, u) => `CREATE ${u ? 'UNIQUE ' : ''}INDEX CONCURRENTLY IF NOT EXISTS`);
 
       return {
@@ -17,8 +18,8 @@ export const createIndexConcurrentlyRule: LockRule = {
         lineNumber: stmt.lineNumber,
         tableName: table,
         offendingSql: stmt.rawSql,
-        explanation: `Creating an index without CONCURRENTLY acquires a ShareLock on "${table}", blocking all concurrent INSERT, UPDATE, and DELETE operations until indexing completes.`,
-        remediationAdvice: 'Add the CONCURRENTLY keyword to build the index without blocking incoming writes.',
+        explanation: `Creating index "${index}" without CONCURRENTLY acquires a ShareLock on "${table}", blocking all concurrent INSERT, UPDATE, and DELETE operations until indexing finishes.`,
+        remediationAdvice: 'Add the CONCURRENTLY keyword to build the index in the background without blocking incoming writes.',
         safeDiffReplacement: safeDiff,
       };
     }

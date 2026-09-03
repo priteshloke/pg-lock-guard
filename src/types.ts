@@ -16,27 +16,39 @@ export type LockLevel =
 
 export type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'WARNING' | 'INFO';
 
+export type StatementType =
+  | 'SET_LOCK_TIMEOUT'
+  | 'CREATE_INDEX'
+  | 'ALTER_TABLE_ADD_COLUMN'
+  | 'ALTER_TABLE_ADD_FOREIGN_KEY'
+  | 'ALTER_TABLE_ADD_UNIQUE'
+  | 'ALTER_TABLE_ADD_PRIMARY_KEY'
+  | 'ALTER_TABLE_ADD_CHECK'
+  | 'ALTER_TABLE_ALTER_COLUMN_TYPE'
+  | 'ALTER_TABLE_ALTER_COLUMN_SET_NOT_NULL'
+  | 'ALTER_TABLE_DROP_COLUMN'
+  | 'VACUUM'
+  | 'BEGIN_TRANSACTION'
+  | 'COMMIT_TRANSACTION'
+  | 'CREATE_TABLE'
+  | 'DROP_TABLE'
+  | 'OTHER';
+
 export interface SqlStatementAst {
   rawSql: string;
   lineNumber: number;
-  type:
-    | 'CREATE_INDEX'
-    | 'ALTER_TABLE_ADD_COLUMN'
-    | 'ALTER_TABLE_ADD_CONSTRAINT'
-    | 'ALTER_TABLE_ALTER_COLUMN'
-    | 'ALTER_TABLE_DROP_COLUMN'
-    | 'VACUUM'
-    | 'SET_LOCK_TIMEOUT'
-    | 'CREATE_TABLE'
-    | 'DROP_TABLE'
-    | 'OTHER';
+  type: StatementType;
   tableName?: string;
+  columnName?: string;
+  columnType?: string;
+  constraintName?: string;
+  indexName?: string;
   isConcurrent?: boolean;
   hasNotValid?: boolean;
   hasVolatileDefault?: boolean;
   defaultExpression?: string;
-  columnType?: string;
   lockTimeoutMs?: number;
+  inTransaction?: boolean;
 }
 
 export interface LockViolation {

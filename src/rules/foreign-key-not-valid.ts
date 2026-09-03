@@ -5,10 +5,12 @@ export const foreignKeyNotValidRule: LockRule = {
   name: 'ADD FOREIGN KEY without NOT VALID',
   severity: 'CRITICAL',
   check: (stmt) => {
-    if (stmt.type === 'ALTER_TABLE_ADD_CONSTRAINT' && !stmt.hasNotValid) {
+    if (stmt.type === 'ALTER_TABLE_ADD_FOREIGN_KEY' && !stmt.hasNotValid) {
       const table = stmt.tableName ?? 'table';
-      const safeAdd = stmt.rawSql.replace(/;?\s*$/, ' NOT VALID;');
-      const safeValidate = `\n-- In a subsequent step or transaction:\nALTER TABLE ${table} VALIDATE CONSTRAINT <constraint_name>;`;
+      const constraint = stmt.constraintName ?? 'fk_constraint';
+      const cleanSql = stmt.rawSql.replace(/;?\s*$/, '');
+      const safeAdd = `${cleanSql} NOT VALID;`;
+      const safeValidate = `\n-- In a separate subsequent transaction or deployment step:\nALTER TABLE ${table} VALIDATE CONSTRAINT ${constraint};`;
 
       return {
         ruleId: 'PG002_FOREIGN_KEY_NOT_VALID',
@@ -18,8 +20,8 @@ export const foreignKeyNotValidRule: LockRule = {
         lineNumber: stmt.lineNumber,
         tableName: table,
         offendingSql: stmt.rawSql,
-        explanation: `Adding a FOREIGN KEY constraint without NOT VALID acquires a ShareRowExclusiveLock on "${table}" and performs a full sequential validation scan, blocking all writes.`,
-        remediationAdvice: 'Add the constraint with NOT VALID (fast metadata lock), then run VALIDATE CONSTRAINT in a separate transaction.',
+        explanation: `Adding FOREIGN KEY constraint "${constraint}" without NOT VALID acquires a ShareRowExclusiveLock on "${table}" and executes an exhaustive table scan, blocking all writes.`,
+        remediationAdvice: 'Add the constraint with NOT VALID (instant metadata-only lock), then run VALIDATE CONSTRAINT in a separate transaction.',
         safeDiffReplacement: safeAdd + safeValidate,
       };
     }

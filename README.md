@@ -1,118 +1,120 @@
-# 🛡️ pg-lock-guard
+# PostgreSQL Zero-Downtime Migration Linter & Lock Guard 🛡️⚡
 
 [![CI](https://github.com/priteshloke/pg-lock-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/priteshloke/pg-lock-guard/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](package.json)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Node: >=18](https://img.shields.io/badge/Node-%3E%3D18-blue.svg)](https://nodejs.org)
 
-> **Zero-Downtime PostgreSQL Migration Linter & Table Lock Detector.**  
-> Catches `AccessExclusiveLock` hazards in CI before SQL DDL deploys to production and blocks web traffic.
+> **Deterministic PostgreSQL migration linter & AST analyzer that detects `AccessExclusiveLock` hazards, table rewrites, and missing timeouts in CI/CD before DDL touches production.**
 
 ---
 
-## 🛑 The Problem
+## 📌 The Problem: How DDL Migrations Crash Production
 
 In PostgreSQL, executing standard DDL commands like `CREATE INDEX` or `ALTER TABLE ADD CONSTRAINT` acquires heavy table locks (`ShareLock` or `ShareRowExclusiveLock`). 
 
-When executed on high-traffic production databases:
+When executed on tables with millions of rows:
 1. The DDL query waits for existing slow read/write queries to finish.
 2. All subsequent incoming web requests queue behind the waiting DDL.
-3. PostgreSQL connection pool fills up within seconds, triggering **HTTP 504 Gateway Timeouts** across your application.
+3. The database connection pool fills up within seconds, taking down the entire web application with **HTTP 504 Gateway Timeouts**.
 
-`pg-lock-guard` statically parses your SQL migration files in CI, identifies dangerous lock acquisitions, and emits human-reviewable **zero-downtime safe diffs (`--suggest-diff`)**.
+`pg-lock-guard` audits migration files statically in CI/CD, blocks unsafe table locks, and emits safe, zero-downtime replacements.
 
 ---
 
-## 🔍 Rules & Hazards Detected
+## 🛡️ Rule Catalog
 
-| Rule ID | Rule Name | Acquired Lock | Hazard & Downtime Risk |
+| Rule ID | Hazard Name | Lock Acquired | Risk & Zero-Downtime Remediation |
 |---|---|---|---|
-| `PG001` | **CREATE INDEX without CONCURRENTLY** | `ShareLock` | Blocks all concurrent `INSERT`, `UPDATE`, `DELETE` operations until indexing finishes. |
-| `PG002` | **ADD FOREIGN KEY without NOT VALID** | `ShareRowExclusiveLock` | Performs a full sequential table scan while blocking writes. |
-| `PG003` | **ADD COLUMN with Volatile Default** | `AccessExclusiveLock` | Forces full physical table rewrite while blocking all reads and writes. |
-| `PG004` | **Missing SET lock_timeout** | `AccessExclusiveLock` | Allows DDL to wait indefinitely, blocking the entire connection pool. |
-| `PG005` | **ALTER COLUMN TYPE** | `AccessExclusiveLock` | Forces full table rewrite and blocks all concurrent transactions. |
-| `PG006` | **VACUUM FULL** | `AccessExclusiveLock` | Completely locks table and rewrites all data files and indexes. |
-| `PG007` | **DROP COLUMN CASCADE** | `AccessExclusiveLock` | Drops dependent views and triggers with heavy exclusive locks. |
+| `PG001` | **CREATE INDEX without CONCURRENTLY** | `ShareLock` | Blocks all concurrent `INSERT`, `UPDATE`, `DELETE` operations. **Fix:** Add `CONCURRENTLY`. |
+| `PG002` | **ADD FOREIGN KEY without NOT VALID** | `ShareRowExclusiveLock` | Performs full sequential scan while holding write lock. **Fix:** Add `NOT VALID`, validate later. |
+| `PG003` | **ADD COLUMN with Volatile Default** | `AccessExclusiveLock` | Volatile defaults (`gen_random_uuid()`) force full table rewrite. **Fix:** Add NULLable, backfill. |
+| `PG004` | **Missing SET lock_timeout** | `AccessExclusiveLock` | Allows DDL to wait indefinitely, blocking the entire connection pool. **Fix:** Set `lock_timeout = '3s'`. |
+| `PG005` | **ALTER COLUMN TYPE** | `AccessExclusiveLock` | Forces full physical table rewrite. **Fix:** Add new column, dual-write, backfill, swap. |
+| `PG006` | **VACUUM FULL** | `AccessExclusiveLock` | Completely locks out all reads and writes. **Fix:** Use standard `VACUUM` or `pg_repack`. |
+| `PG007` | **DROP COLUMN** | `AccessExclusiveLock` | Breaks active application queries referencing the column. **Fix:** Decouple app code first. |
+| `PG008` | **ADD UNIQUE / PRIMARY KEY without Index** | `AccessExclusiveLock` | Direct constraint addition takes exclusive lock. **Fix:** `CREATE UNIQUE INDEX CONCURRENTLY` + `USING INDEX`. |
+| `PG009` | **ADD CHECK without NOT VALID** | `AccessExclusiveLock` | Scans table under exclusive lock. **Fix:** Add `NOT VALID`, then `VALIDATE CONSTRAINT`. |
+| `PG010` | **ALTER COLUMN SET NOT NULL** | `AccessExclusiveLock` | Scans table to verify no NULLs exist. **Fix:** Add CHECK constraint `NOT VALID`, validate, then set. |
+| `PG011` | **CONCURRENT Index in Transaction** | Fatal Error | PostgreSQL prohibits `CONCURRENTLY` in `BEGIN ... COMMIT`. **Fix:** Execute standalone. |
 
 ---
 
-## 🚀 Installation & Usage
+## 🚀 Quick Start
+
+### 1. Installation
 
 ```bash
 # Run directly with npx
-npx pg-lock-guard migrations/20260903_add_orders_index.sql
+npx pg-lock-guard migrations/V10__add_orders_index.sql --suggest-diff
 
-# Or install globally
-npm install -g pg-lock-guard
+# Or install locally in your repository
+npm install --save-dev pg-lock-guard
 ```
 
-### CLI Command Options:
+### 2. Run against an unsafe migration
 
 ```bash
-# Basic audit
-pg-lock-guard migration.sql
-
-# Output safe suggested unified diff patch
-pg-lock-guard migration.sql --suggest-diff
-
-# Machine-readable JSON output for CI pipelines
-pg-lock-guard migration.sql --json
+npx pg-lock-guard fixtures/unsafe-migration.sql --suggest-diff
 ```
 
----
-
-## 📝 Example Output & Suggested Diff
-
-```text
+**Output:**
+```diff
 ================================================================
 🛡️  PG-LOCK-GUARD: PostgreSQL Zero-Downtime Migration Linter
 ================================================================
-📄 Target File:      migrations/add_customer_index.sql
-📊 Statements Analyzed: 2
+📄 Target File:      fixtures/unsafe-migration.sql
+📊 Statements Analyzed: 6
 ⏱️ Lock Timeout Set:  🚨 NO (Missing SET lock_timeout)
 
-🚨 LOCK HAZARDS DETECTED (2 Violations):
-----------------------------------------------------------------
+🚨 LOCK HAZARDS DETECTED (7 Violations):
 1. ⚠️ [HIGH] Migration Missing SET lock_timeout (Line 1)
-   • Lock Acquired:   AccessExclusiveLock
-   • Recommended Fix: Add `SET lock_timeout = '3s';` at the top of your migration.
+2. 🚨 [CRITICAL] CREATE INDEX without CONCURRENTLY (Line 4)
+3. 🚨 [CRITICAL] ADD FOREIGN KEY without NOT VALID (Line 7)
+4. 🚨 [CRITICAL] ADD COLUMN with Volatile Default Expression (Line 10)
+5. 🚨 [CRITICAL] VACUUM FULL Table Lockout (Line 13)
+6. ⚠️ [HIGH] ALTER COLUMN TYPE Full Table Rewrite (Line 16)
+7. ℹ️ [MEDIUM] DROP COLUMN with Potential Cascade Lock (Line 19)
 
-2. 🚨 [CRITICAL] CREATE INDEX without CONCURRENTLY (Line 2)
-   • Table Target:    orders
-   • Lock Acquired:   ShareLock
-   • Recommended Fix: Add CONCURRENTLY to build the index without blocking writes.
-
-================================================================
-SUMMARY: 1 Critical | 1 High | 0 Medium
+SUMMARY: 4 Critical | 2 High | 1 Medium
 CI GATE: ❌ FAILED (Deploy Blocked to Prevent Production Outage)
 ================================================================
-```
 
-When run with `--suggest-diff`:
-
-```diff
---- a/migrations/add_customer_index.sql (Unsafe Migration)
-+++ b/migrations/add_customer_index.sql (Suggested Zero-Downtime Safe Migration)
+📝 Suggested Zero-Downtime Patch:
+----------------------------------------------------------------
+--- a/fixtures/unsafe-migration.sql (Unsafe Migration)
++++ b/fixtures/unsafe-migration.sql (Suggested Zero-Downtime Safe Migration)
 @@ -1 +1 @@
 + SET lock_timeout = '3s'; -- Guard: abort DDL if blocked by long queries
 - CREATE INDEX idx_orders_customer_id ON orders (customer_id);
 + CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_customer_id ON orders (customer_id);
+- ALTER TABLE orders ADD CONSTRAINT fk_orders_customer FOREIGN KEY (customer_id) REFERENCES customers(id);
++ ALTER TABLE orders ADD CONSTRAINT fk_orders_customer FOREIGN KEY (customer_id) REFERENCES customers(id) NOT VALID;
 ```
 
 ---
 
-## 🛡️ Zero-Liability Guarantee
+## 🔧 GitHub Actions CI/CD Integration
 
-`pg-lock-guard` is strictly an advisory linter. It **never mutates or executes destructive transforms** on production databases. All safe recommendations are emitted as standard unified diffs for human engineer review and approval.
+Add `pg-lock-guard` to your Pull Request workflow:
+
+```yaml
+name: Database Migration Linter
+on: [pull_request]
+
+jobs:
+  lint-migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npx pg-lock-guard migrations/*.sql --suggest-diff
+```
 
 ---
-
-## 🧪 Testing
-
-```bash
-npm test
-```
 
 ## 📄 License
 
-MIT © [Pritesh Loke](https://github.com/priteshloke)
+[MIT](LICENSE) © 2026 Pritesh Loke

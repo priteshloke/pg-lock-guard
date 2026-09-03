@@ -1,7 +1,7 @@
 /**
  * src/diff-suggester.ts
  *
- * Generates unified diffs and suggested safe SQL replacements for detected violations.
+ * Generates unified diffs and suggested safe zero-downtime SQL replacements.
  */
 
 import { MigrationAuditResult } from './types.js';
@@ -26,13 +26,17 @@ export function generateSuggestedDiff(result: MigrationAuditResult, originalSql:
   for (let i = 0; i < originalLines.length; i++) {
     const lineNum = i + 1;
     const lineText = originalLines[i]!;
-    const violation = result.violations.find(v => v.lineNumber === lineNum && v.ruleId !== 'PG004_MISSING_LOCK_TIMEOUT');
+    const lineViolations = result.violations.filter(v => v.lineNumber === lineNum && v.ruleId !== 'PG004_MISSING_LOCK_TIMEOUT');
 
-    if (violation && violation.safeDiffReplacement) {
+    if (lineViolations.length > 0 && lineViolations.some(v => v.safeDiffReplacement)) {
       diffLines.push(`- ${lineText}`);
-      const replacementLines = violation.safeDiffReplacement.split('\n');
-      for (const r of replacementLines) {
-        diffLines.push(`+ ${r}`);
+      for (const v of lineViolations) {
+        if (v.safeDiffReplacement) {
+          const replacementLines = v.safeDiffReplacement.split('\n');
+          for (const r of replacementLines) {
+            diffLines.push(`+ ${r}`);
+          }
+        }
       }
     } else {
       diffLines.push(`  ${lineText}`);
