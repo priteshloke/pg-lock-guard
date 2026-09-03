@@ -7,8 +7,15 @@
   "bin": {
     "pg-lock-guard": "bin/cli.js"
   },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
   "scripts": {
+    "prepare": "tsc",
     "build": "tsc",
     "test": "tsx --test src/__tests__/*.test.ts",
     "typecheck": "tsc --noEmit",

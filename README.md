@@ -41,23 +41,31 @@ When executed on tables with millions of rows:
 
 ## 🚀 Quick Start
 
-### 1. Installation
+### 1. Run from Source / Local Clone
 
 ```bash
-# Run directly with npx
+git clone https://github.com/priteshloke/pg-lock-guard.git
+cd pg-lock-guard
+npm install
+node bin/cli.js fixtures/unsafe-migration.sql --suggest-diff
+```
+
+### 2. Run via NPX or Local Dev Dependency
+
+```bash
+# Direct run via npx (or when linked with npm link)
 npx pg-lock-guard migrations/V10__add_orders_index.sql --suggest-diff
 
 # Or install locally in your repository
 npm install --save-dev pg-lock-guard
 ```
 
-### 2. Run against an unsafe migration
+### 3. Example Output
 
 ```bash
-npx pg-lock-guard fixtures/unsafe-migration.sql --suggest-diff
+node bin/cli.js fixtures/unsafe-migration.sql --suggest-diff
 ```
 
-**Output:**
 ```diff
 ================================================================
 🛡️  PG-LOCK-GUARD: PostgreSQL Zero-Downtime Migration Linter
